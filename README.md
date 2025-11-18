@@ -1,6 +1,6 @@
 # AutoSpectator
 
-A blank mockup for a Minecraft Spigot plugin.
+An auto-spectate Minecraft Spigot plugin for automatically spectate players in the background without using a finger.
 
 ## Requirements
 
@@ -98,8 +98,4 @@ This class extends `JavaPlugin` and provides:
 
 ## License
 
-Specify your license here.
-
-## Support
-
-For issues or questions, contact the plugin author.
+MIT
