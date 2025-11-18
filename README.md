@@ -8,7 +8,7 @@ Before building and running this plugin, ensure you have the following installed
 
 ### System Requirements
 
-- **Java Development Kit (JDK)**: Version 8 or higher
+- **Java Development Kit (JDK)**: Version 16 or higher
 
   - Download from: https://www.oracle.com/java/technologies/downloads/
   - Or use OpenJDK: https://openjdk.org/
