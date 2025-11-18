@@ -1,0 +1,7 @@
+spectate-duration: 15
+triggers:
+  damage: true
+  damage-threshold: 5.0
+  hostile-mob-hit: true
+  fall-damage-prediction: true
+  fall-distance-threshold: 5.0

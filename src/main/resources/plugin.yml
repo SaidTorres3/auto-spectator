@@ -2,5 +2,14 @@ name: AutoSpectator
 version: "1.0"
 main: com.example.plugin.Main
 api-version: 1.20
-description: A blank mockup for a Minecraft plugin.
+description: Automated spectator plugin for recording.
 author: YourName
+commands:
+  autospectate:
+    description: Toggle auto-spectator mode or configure settings.
+    usage: /autospectate [player|time|auto] [value]
+    permission: autospectator.use
+permissions:
+  autospectator.use:
+    description: Allows use of the autospectate command.
+    default: op
