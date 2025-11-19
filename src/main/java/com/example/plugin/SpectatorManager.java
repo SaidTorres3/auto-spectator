@@ -120,7 +120,6 @@ public class SpectatorManager {
         
         // Movement variables
         private double angle = 0;
-        private double radius = 5.0;
 
         public SpectatorSession(Main plugin, Player spectator) {
             this.spectator = spectator;
@@ -213,62 +212,89 @@ public class SpectatorManager {
             if (currentTarget == null || !currentTarget.isOnline()) return;
 
             // Cinematic movement logic with reduced rotation speed
-            angle += 0.008; // Reduced rotation speed from 0.02 to 0.008 for smoother camera
-            
-            // Smoothly interpolate Y offset with reduced oscillation
-            // Gentle hovering effect without excessive motion
-            double hoverHeight = 3.0 + Math.sin(angle * 0.3) * 0.5; 
+            angle += 0.008;
             
             Location targetLoc = currentTarget.getLocation();
-            // Add offset with increased radius for better distance
-            double x = radius * Math.cos(angle);
-            double z = radius * Math.sin(angle);
             
-            Location camLoc = targetLoc.clone().add(x, hoverHeight, z);
+            // Check all angles and count blocked blocks
+            int[] blockCounts = new int[8];
+            boolean[] isBlocked = new boolean[8];
+            int minBlocks = Integer.MAX_VALUE;
+            int bestAngleIndex = -1;
+            boolean anyAngleClear = false;
             
-            // Check if blocks are interfering with the line of sight
-            if (isLineOfSightBlocked(camLoc, targetLoc)) {
-                // If blocked, try to find a better angle
-                for (int i = 0; i < 8; i++) {
-                    double testAngle = angle + (Math.PI / 4) * i; // Try 8 different angles
-                    double testX = radius * Math.cos(testAngle);
-                    double testZ = radius * Math.sin(testAngle);
-                    Location testCamLoc = targetLoc.clone().add(testX, hoverHeight, testZ);
-                    
-                    if (!isLineOfSightBlocked(testCamLoc, targetLoc)) {
-                        // Found a clear angle, use it
-                        camLoc = testCamLoc;
-                        angle = testAngle; // Update angle to this clear position
-                        break;
+            for (int i = 0; i < 8; i++) {
+                double testAngle = angle + (Math.PI / 4) * i;
+                double testX = 5.0 * Math.cos(testAngle);
+                double testZ = 5.0 * Math.sin(testAngle);
+                double hoverHeight = 3.0 + Math.sin(testAngle * 0.3) * 0.5;
+                
+                Location testCamLoc = targetLoc.clone().add(testX, hoverHeight, testZ);
+                
+                int blockCount = countBlocksInLineOfSight(testCamLoc, targetLoc);
+                blockCounts[i] = blockCount;
+                isBlocked[i] = blockCount > 0;
+                
+                // Track the angle with least blocks
+                if (blockCount < minBlocks) {
+                    minBlocks = blockCount;
+                    bestAngleIndex = i;
+                    if (blockCount == 0) {
+                        anyAngleClear = true;
                     }
                 }
             }
             
+            Location camLoc;
+            
+            if (anyAngleClear) {
+                // Use the angle with zero blocks
+                double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
+                double bestX = 5.0 * Math.cos(bestAngle);
+                double bestZ = 5.0 * Math.sin(bestAngle);
+                double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
+                camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
+                angle = bestAngle;
+            } else if (minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
+                // All angles blocked, use the one with least blocks
+                double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
+                double bestX = 5.0 * Math.cos(bestAngle);
+                double bestZ = 5.0 * Math.sin(bestAngle);
+                double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
+                camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
+                angle = bestAngle;
+            } else {
+                // All angles completely blocked - use aerial view
+                double hoverHeight = 15.0; // Much higher for aerial view
+                camLoc = targetLoc.clone().add(0, hoverHeight, 0);
+                // Don't update angle for aerial view, just stay above
+            }
+            
             // Make camera look at the target (specifically their eyes/head)
-            // Added slight offset for more natural viewing angle
-            Location lookAt = targetLoc.clone().add(0, 1.6, 0); // Eye level
+            Location lookAt = targetLoc.clone().add(0, 1.6, 0);
             Vector direction = lookAt.toVector().subtract(camLoc.toVector());
             camLoc.setDirection(direction);
 
             spectator.teleport(camLoc);
         }
 
-        private boolean isLineOfSightBlocked(Location from, Location to) {
+        private int countBlocksInLineOfSight(Location from, Location to) {
             Vector direction = to.toVector().subtract(from.toVector());
             double distance = direction.length();
             direction.normalize();
             
+            int blockCount = 0;
             // Check blocks along the line from camera to target
             for (double d = 0.5; d < distance; d += 0.5) {
                 Location checkLoc = from.clone().add(direction.clone().multiply(d));
                 Block block = checkLoc.getBlock();
                 
-                // Check if block is solid and not air or transparent
+                // Count solid blocks that are not air or transparent
                 if (block.getType().isSolid() && !block.isPassable()) {
-                    return true;
+                    blockCount++;
                 }
             }
-            return false;
+            return blockCount;
         }
     }
 }
