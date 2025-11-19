@@ -3,6 +3,7 @@ package com.example.plugin;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
@@ -111,7 +112,6 @@ public class SpectatorManager {
     }
 
     private class SpectatorSession {
-        private final Main plugin;
         private final Player spectator;
         private Player currentTarget;
         private boolean autoMode = true;
@@ -120,12 +120,9 @@ public class SpectatorManager {
         
         // Movement variables
         private double angle = 0;
-        private double currentYOffset = 3.0;
-        private double targetYOffset = 3.0;
         private double radius = 5.0;
 
         public SpectatorSession(Main plugin, Player spectator) {
-            this.plugin = plugin;
             this.spectator = spectator;
             this.duration = plugin.getConfig().getInt("spectate-duration", 15);
             this.timeRemaining = duration;
@@ -215,26 +212,63 @@ public class SpectatorManager {
         public void updateMovement() {
             if (currentTarget == null || !currentTarget.isOnline()) return;
 
-            // Cinematic movement logic
-            angle += 0.02; // Rotation speed
+            // Cinematic movement logic with reduced rotation speed
+            angle += 0.008; // Reduced rotation speed from 0.02 to 0.008 for smoother camera
             
-            // Smoothly interpolate Y offset
-            // Maybe oscillate slightly?
-            double hoverHeight = 3.0 + Math.sin(angle * 0.5) * 1.0; 
+            // Smoothly interpolate Y offset with reduced oscillation
+            // Gentle hovering effect without excessive motion
+            double hoverHeight = 3.0 + Math.sin(angle * 0.3) * 0.5; 
             
             Location targetLoc = currentTarget.getLocation();
-            // Add offset
+            // Add offset with increased radius for better distance
             double x = radius * Math.cos(angle);
             double z = radius * Math.sin(angle);
             
             Location camLoc = targetLoc.clone().add(x, hoverHeight, z);
             
+            // Check if blocks are interfering with the line of sight
+            if (isLineOfSightBlocked(camLoc, targetLoc)) {
+                // If blocked, try to find a better angle
+                for (int i = 0; i < 8; i++) {
+                    double testAngle = angle + (Math.PI / 4) * i; // Try 8 different angles
+                    double testX = radius * Math.cos(testAngle);
+                    double testZ = radius * Math.sin(testAngle);
+                    Location testCamLoc = targetLoc.clone().add(testX, hoverHeight, testZ);
+                    
+                    if (!isLineOfSightBlocked(testCamLoc, targetLoc)) {
+                        // Found a clear angle, use it
+                        camLoc = testCamLoc;
+                        angle = testAngle; // Update angle to this clear position
+                        break;
+                    }
+                }
+            }
+            
             // Make camera look at the target (specifically their eyes/head)
-            Location lookAt = targetLoc.clone().add(0, 1.5, 0); // Eye level
+            // Added slight offset for more natural viewing angle
+            Location lookAt = targetLoc.clone().add(0, 1.6, 0); // Eye level
             Vector direction = lookAt.toVector().subtract(camLoc.toVector());
             camLoc.setDirection(direction);
 
             spectator.teleport(camLoc);
+        }
+
+        private boolean isLineOfSightBlocked(Location from, Location to) {
+            Vector direction = to.toVector().subtract(from.toVector());
+            double distance = direction.length();
+            direction.normalize();
+            
+            // Check blocks along the line from camera to target
+            for (double d = 0.5; d < distance; d += 0.5) {
+                Location checkLoc = from.clone().add(direction.clone().multiply(d));
+                Block block = checkLoc.getBlock();
+                
+                // Check if block is solid and not air or transparent
+                if (block.getType().isSolid() && !block.isPassable()) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }
