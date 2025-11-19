@@ -3,6 +3,8 @@ package com.autospectator.plugin;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -457,12 +459,13 @@ public class SpectatorManager {
             return block.getType().isSolid() && !block.isPassable();
         }
         
-        @SuppressWarnings("deprecation")
         private void showPlayerNameActionBar() {
             // Show player name in ActionBar (subtitle bar)
             String playerName = currentTarget.getName();
             int health = (int) Math.ceil(currentTarget.getHealth());
-            int maxHealth = (int) Math.ceil(currentTarget.getMaxHealth());
+            AttributeInstance maxHealthAttribute = currentTarget.getAttribute(Attribute.MAX_HEALTH);
+            double maxHealthValue = maxHealthAttribute != null ? maxHealthAttribute.getValue() : currentTarget.getHealth();
+            int maxHealth = (int) Math.ceil(maxHealthValue);
             String actionBarMessage = "§eSpectating: §a" + playerName + " §c❤ " + health + "/" + maxHealth;
             
             // Using spigot API to send action bar
@@ -470,7 +473,6 @@ public class SpectatorManager {
             spectator.spigot().sendMessage(net.md_5.bungee.api.ChatMessageType.ACTION_BAR, component);
         }
 
-        @SuppressWarnings("deprecation")
         private void showDeathLocationActionBar() {
             // Show death location spectation info in ActionBar
             String actionBarMessage = "§cSpectating death of §e" + locationTargetName + " §c(" + locationSpectationTimeRemaining + "s)";
