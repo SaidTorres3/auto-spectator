@@ -19,6 +19,11 @@ public class SpectatorManager {
     private final Map<UUID, SpectatorSession> sessions = new HashMap<>();
     private final Random random = new Random();
 
+    public enum PerspectiveMode {
+        FOLLOWUP,
+        CINEMATIC
+    }
+
     public SpectatorManager(Main plugin) {
         this.plugin = plugin;
         startTasks();
@@ -78,6 +83,15 @@ public class SpectatorManager {
         }
     }
 
+    public void setPerspective(Player player, PerspectiveMode mode) {
+        if (sessions.containsKey(player.getUniqueId())) {
+            sessions.get(player.getUniqueId()).setPerspective(mode);
+            player.sendMessage("§aPerspective set to " + mode.name().toLowerCase() + ".");
+        } else {
+            player.sendMessage("§cYou are not in auto-spectator mode.");
+        }
+    }
+
     public void setTarget(Player spectator, String targetName) {
         if (!sessions.containsKey(spectator.getUniqueId())) {
             startSpectating(spectator);
@@ -132,6 +146,10 @@ public class SpectatorManager {
         private int timeRemaining;
         private int locationSpectationTimeRemaining = 0;
         
+        private PerspectiveMode perspective = PerspectiveMode.FOLLOWUP;
+        private Location cinematicLocation;
+        private long lastCinematicSwitch;
+
         // Movement variables
         private double angle = 0;
 
@@ -191,6 +209,11 @@ public class SpectatorManager {
             spectator.setSpectatorTarget(null); // Unlock camera so we can move it
         }
 
+        public void setPerspective(PerspectiveMode mode) {
+            this.perspective = mode;
+            this.cinematicLocation = null; // Reset cinematic location
+        }
+
         public void tick() {
             if (!autoMode) return; // In single player mode, we don't cycle
 
@@ -247,92 +270,154 @@ public class SpectatorManager {
 
             // Handle location spectation (stationary camera at death location)
             if (currentLocationTarget != null && locationSpectationTimeRemaining > 0) {
-                Location targetLoc = currentLocationTarget;
-                
-                // Cinematic movement around the death location
-                angle += 0.008;
-                
-                // Check all angles and count blocked blocks
-                int[] blockCounts = new int[8];
-                boolean[] canPlaceCamera = new boolean[8];
-                int minBlocks = Integer.MAX_VALUE;
-                int bestAngleIndex = -1;
-                boolean anyAngleClear = false;
-                boolean anyValidAngle = false;
-                
-                for (int i = 0; i < 8; i++) {
-                    double testAngle = angle + (Math.PI / 4) * i;
-                    double testX = 5.0 * Math.cos(testAngle);
-                    double testZ = 5.0 * Math.sin(testAngle);
-                    double hoverHeight = 3.0 + Math.sin(testAngle * 0.3) * 0.5;
-                    
-                    Location testCamLoc = targetLoc.clone().add(testX, hoverHeight, testZ);
-                    
-                    // Check if camera position is not inside a block
-                    boolean cameraInBlock = isCameraInBlock(testCamLoc);
-                    canPlaceCamera[i] = !cameraInBlock;
-                    
-                    if (!cameraInBlock) {
-                        anyValidAngle = true;
-                        int blockCount = countBlocksInLineOfSight(testCamLoc, targetLoc);
-                        blockCounts[i] = blockCount;
-                        
-                        // Track the angle with least blocks
-                        if (blockCount < minBlocks) {
-                            minBlocks = blockCount;
-                            bestAngleIndex = i;
-                            if (blockCount == 0) {
-                                anyAngleClear = true;
-                            }
-                        }
-                    }
-                }
-                
-                Location camLoc;
-                
-                if (anyAngleClear && canPlaceCamera[bestAngleIndex]) {
-                    // Use the angle with zero blocks and valid camera position
-                    double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
-                    double bestX = 5.0 * Math.cos(bestAngle);
-                    double bestZ = 5.0 * Math.sin(bestAngle);
-                    double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
-                    camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
-                    
-                    // Make camera look at the death location
-                    Location lookAt = targetLoc.clone().add(0, 1.0, 0);
-                    Vector direction = lookAt.toVector().subtract(camLoc.toVector());
-                    camLoc.setDirection(direction);
-                    
-                    angle = bestAngle;
-                    spectator.teleport(camLoc);
-                    showDeathLocationActionBar();
-                } else if (anyValidAngle && minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
-                    // Use the best valid angle with least blocks
-                    double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
-                    double bestX = 5.0 * Math.cos(bestAngle);
-                    double bestZ = 5.0 * Math.sin(bestAngle);
-                    double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
-                    camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
-                    
-                    // Make camera look at the death location
-                    Location lookAt = targetLoc.clone().add(0, 1.0, 0);
-                    Vector direction = lookAt.toVector().subtract(camLoc.toVector());
-                    camLoc.setDirection(direction);
-                    
-                    angle = bestAngle;
-                    spectator.teleport(camLoc);
-                    showDeathLocationActionBar();
-                } else {
-                    // Stay at death location first-person view
-                    spectator.teleport(targetLoc.clone().add(0, 1.6, 0));
-                    showDeathLocationActionBar();
-                }
+                updateDeathLocationSpectation();
                 return;
             }
 
             // Handle player target spectation (normal mode)
             if (currentTarget == null || !currentTarget.isOnline()) return;
 
+            if (perspective == PerspectiveMode.CINEMATIC) {
+                updateCinematicMovement();
+            } else {
+                updateFollowupMovement();
+            }
+        }
+
+        private void updateDeathLocationSpectation() {
+            Location targetLoc = currentLocationTarget;
+            
+            // Cinematic movement around the death location
+            angle += 0.008;
+            
+            // Check all angles and count blocked blocks
+            int[] blockCounts = new int[8];
+            boolean[] canPlaceCamera = new boolean[8];
+            int minBlocks = Integer.MAX_VALUE;
+            int bestAngleIndex = -1;
+            boolean anyAngleClear = false;
+            boolean anyValidAngle = false;
+            
+            for (int i = 0; i < 8; i++) {
+                double testAngle = angle + (Math.PI / 4) * i;
+                double testX = 5.0 * Math.cos(testAngle);
+                double testZ = 5.0 * Math.sin(testAngle);
+                double hoverHeight = 3.0 + Math.sin(testAngle * 0.3) * 0.5;
+                
+                Location testCamLoc = targetLoc.clone().add(testX, hoverHeight, testZ);
+                
+                // Check if camera position is not inside a block
+                boolean cameraInBlock = isCameraInBlock(testCamLoc);
+                canPlaceCamera[i] = !cameraInBlock;
+                
+                if (!cameraInBlock) {
+                    anyValidAngle = true;
+                    int blockCount = countBlocksInLineOfSight(testCamLoc, targetLoc);
+                    blockCounts[i] = blockCount;
+                    
+                    // Track the angle with least blocks
+                    if (blockCount < minBlocks) {
+                        minBlocks = blockCount;
+                        bestAngleIndex = i;
+                        if (blockCount == 0) {
+                            anyAngleClear = true;
+                        }
+                    }
+                }
+            }
+            
+            Location camLoc;
+            
+            if (anyAngleClear && canPlaceCamera[bestAngleIndex]) {
+                // Use the angle with zero blocks and valid camera position
+                double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
+                double bestX = 5.0 * Math.cos(bestAngle);
+                double bestZ = 5.0 * Math.sin(bestAngle);
+                double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
+                camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
+                
+                // Make camera look at the death location
+                Location lookAt = targetLoc.clone().add(0, 1.0, 0);
+                Vector direction = lookAt.toVector().subtract(camLoc.toVector());
+                camLoc.setDirection(direction);
+                
+                angle = bestAngle;
+                spectator.teleport(camLoc);
+                showDeathLocationActionBar();
+            } else if (anyValidAngle && minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
+                // Use the best valid angle with least blocks
+                double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
+                double bestX = 5.0 * Math.cos(bestAngle);
+                double bestZ = 5.0 * Math.sin(bestAngle);
+                double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
+                camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
+                
+                // Make camera look at the death location
+                Location lookAt = targetLoc.clone().add(0, 1.0, 0);
+                Vector direction = lookAt.toVector().subtract(camLoc.toVector());
+                camLoc.setDirection(direction);
+                
+                angle = bestAngle;
+                spectator.teleport(camLoc);
+                showDeathLocationActionBar();
+            } else {
+                // Stay at death location first-person view
+                spectator.teleport(targetLoc.clone().add(0, 1.6, 0));
+                showDeathLocationActionBar();
+            }
+        }
+
+        private void updateCinematicMovement() {
+            Location targetLoc = currentTarget.getLocation();
+            long currentTime = System.currentTimeMillis();
+
+            // Check if we need to switch position (every 8 seconds or if view is blocked)
+            boolean needsSwitch = cinematicLocation == null || 
+                                  (currentTime - lastCinematicSwitch > 8000) || // Switch every 8 seconds
+                                  countBlocksInLineOfSight(cinematicLocation, targetLoc.clone().add(0, 1.6, 0)) > 0 ||
+                                  cinematicLocation.distance(targetLoc) > 25; // Too far
+
+            if (needsSwitch) {
+                // Find a new spot
+                List<Location> candidates = new ArrayList<>();
+                for (int i = 0; i < 15; i++) {
+                    // Random angle and distance
+                    double angle = random.nextDouble() * Math.PI * 2;
+                    double distance = 6 + random.nextDouble() * 14; // 6 to 20 blocks away
+                    double height = -2 + random.nextDouble() * 8; // -2 to +6 height relative to player
+
+                    Location candidate = targetLoc.clone().add(
+                        distance * Math.cos(angle),
+                        height,
+                        distance * Math.sin(angle)
+                    );
+
+                    // Check if valid
+                    if (!isCameraInBlock(candidate) && countBlocksInLineOfSight(candidate, targetLoc.clone().add(0, 1.6, 0)) == 0) {
+                        candidates.add(candidate);
+                    }
+                }
+
+                if (!candidates.isEmpty()) {
+                    cinematicLocation = candidates.get(random.nextInt(candidates.size()));
+                    lastCinematicSwitch = currentTime;
+                } else if (cinematicLocation == null) {
+                    // Fallback if no good spot found: just go up
+                    cinematicLocation = targetLoc.clone().add(0, 5, 0);
+                }
+            }
+
+            // Always look at the player
+            if (cinematicLocation != null) {
+                Location lookAt = targetLoc.clone().add(0, 1.6, 0); // Look at eyes
+                Vector direction = lookAt.toVector().subtract(cinematicLocation.toVector());
+                cinematicLocation.setDirection(direction);
+                spectator.teleport(cinematicLocation);
+                showPlayerNameActionBar();
+            }
+        }
+
+        private void updateFollowupMovement() {
             Location targetLoc = currentTarget.getLocation();
             
             // Check if the target is in a very tight space (like a 2x1 tunnel)

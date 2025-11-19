@@ -45,6 +45,20 @@ public class AutoSpectateCommand implements CommandExecutor {
             case "auto":
                 spectatorManager.setAutoMode(player);
                 break;
+            case "perspective":
+                if (args.length < 2) {
+                    player.sendMessage("§cUsage: /autospectate perspective <cinematic|followup>");
+                    return true;
+                }
+                String modeStr = args[1].toLowerCase();
+                if (modeStr.equals("cinematic")) {
+                    spectatorManager.setPerspective(player, SpectatorManager.PerspectiveMode.CINEMATIC);
+                } else if (modeStr.equals("followup")) {
+                    spectatorManager.setPerspective(player, SpectatorManager.PerspectiveMode.FOLLOWUP);
+                } else {
+                    player.sendMessage("§cInvalid perspective. Use 'cinematic' or 'followup'.");
+                }
+                break;
             default:
                 // Assume it's a player name
                 spectatorManager.setTarget(player, args[0]);
