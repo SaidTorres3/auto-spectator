@@ -217,6 +217,7 @@ public class SpectatorManager {
             if (isInTightSpace(targetLoc)) {
                 // Switch to first-person view by teleporting spectator to target location
                 spectator.setSpectatorTarget(currentTarget);
+                showPlayerNameActionBar();
                 return;
             }
             
@@ -228,10 +229,11 @@ public class SpectatorManager {
             
             // Check all angles and count blocked blocks
             int[] blockCounts = new int[8];
-            boolean[] isBlocked = new boolean[8];
+            boolean[] canPlaceCamera = new boolean[8];
             int minBlocks = Integer.MAX_VALUE;
             int bestAngleIndex = -1;
             boolean anyAngleClear = false;
+            boolean anyValidAngle = false;
             
             for (int i = 0; i < 8; i++) {
                 double testAngle = angle + (Math.PI / 4) * i;
@@ -241,51 +243,111 @@ public class SpectatorManager {
                 
                 Location testCamLoc = targetLoc.clone().add(testX, hoverHeight, testZ);
                 
-                int blockCount = countBlocksInLineOfSight(testCamLoc, targetLoc);
-                blockCounts[i] = blockCount;
-                isBlocked[i] = blockCount > 0;
+                // Check if camera position is not inside a block
+                boolean cameraInBlock = isCameraInBlock(testCamLoc);
+                canPlaceCamera[i] = !cameraInBlock;
                 
-                // Track the angle with least blocks
-                if (blockCount < minBlocks) {
-                    minBlocks = blockCount;
-                    bestAngleIndex = i;
-                    if (blockCount == 0) {
-                        anyAngleClear = true;
+                if (!cameraInBlock) {
+                    anyValidAngle = true;
+                    int blockCount = countBlocksInLineOfSight(testCamLoc, targetLoc);
+                    blockCounts[i] = blockCount;
+                    
+                    // Track the angle with least blocks
+                    if (blockCount < minBlocks) {
+                        minBlocks = blockCount;
+                        bestAngleIndex = i;
+                        if (blockCount == 0) {
+                            anyAngleClear = true;
+                        }
                     }
                 }
             }
             
             Location camLoc;
             
-            if (anyAngleClear) {
-                // Use the angle with zero blocks
+            if (anyAngleClear && canPlaceCamera[bestAngleIndex]) {
+                // Use the angle with zero blocks and valid camera position
                 double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
                 double bestX = 5.0 * Math.cos(bestAngle);
                 double bestZ = 5.0 * Math.sin(bestAngle);
                 double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
                 camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
+                
+                // Make camera look at the target (specifically their eyes/head)
+                Location lookAt = targetLoc.clone().add(0, 1.6, 0);
+                Vector direction = lookAt.toVector().subtract(camLoc.toVector());
+                camLoc.setDirection(direction);
+                
                 angle = bestAngle;
-            } else if (minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
-                // All angles blocked, use the one with least blocks
+                spectator.teleport(camLoc);
+                showPlayerNameActionBar();
+            } else if (anyValidAngle && minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
+                // Use the best valid angle with least blocks
                 double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
                 double bestX = 5.0 * Math.cos(bestAngle);
                 double bestZ = 5.0 * Math.sin(bestAngle);
                 double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
                 camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
+                
+                // Make camera look at the target (specifically their eyes/head)
+                Location lookAt = targetLoc.clone().add(0, 1.6, 0);
+                Vector direction = lookAt.toVector().subtract(camLoc.toVector());
+                camLoc.setDirection(direction);
+                
                 angle = bestAngle;
+                spectator.teleport(camLoc);
+                showPlayerNameActionBar();
             } else {
-                // All angles completely blocked - use aerial view
-                double hoverHeight = 15.0; // Much higher for aerial view
-                camLoc = targetLoc.clone().add(0, hoverHeight, 0);
-                // Don't update angle for aerial view, just stay above
+                // No valid angle found at normal distance - switch to first person
+                spectator.setSpectatorTarget(currentTarget);
+                showPlayerNameActionBar();
+            }
+        }
+        
+        private boolean isCameraInBlock(Location loc) {
+            // Check feet, mid-body, and head/eye level
+            if (isBlockSolid(loc) || 
+                isBlockSolid(loc.clone().add(0, 1.0, 0)) || 
+                isBlockSolid(loc.clone().add(0, 1.7, 0))) {
+                return true;
             }
             
-            // Make camera look at the target (specifically their eyes/head)
-            Location lookAt = targetLoc.clone().add(0, 1.6, 0);
-            Vector direction = lookAt.toVector().subtract(camLoc.toVector());
-            camLoc.setDirection(direction);
+            // Check width at feet level
+            if (isBlockSolid(loc.clone().add(0.35, 0, 0)) ||
+                isBlockSolid(loc.clone().add(-0.35, 0, 0)) ||
+                isBlockSolid(loc.clone().add(0, 0, 0.35)) ||
+                isBlockSolid(loc.clone().add(0, 0, -0.35))) {
+                return true;
+            }
 
-            spectator.teleport(camLoc);
+            // Check width at head level (to prevent head clipping into walls)
+            Location headLoc = loc.clone().add(0, 1.6, 0);
+            if (isBlockSolid(headLoc.clone().add(0.35, 0, 0)) ||
+                isBlockSolid(headLoc.clone().add(-0.35, 0, 0)) ||
+                isBlockSolid(headLoc.clone().add(0, 0, 0.35)) ||
+                isBlockSolid(headLoc.clone().add(0, 0, -0.35))) {
+                return true;
+            }
+            
+            return false;
+        }
+        
+        private boolean isBlockSolid(Location loc) {
+            Block block = loc.getBlock();
+            return block.getType().isSolid() && !block.isPassable();
+        }
+        
+        @SuppressWarnings("deprecation")
+        private void showPlayerNameActionBar() {
+            // Show player name in ActionBar (subtitle bar)
+            String playerName = currentTarget.getName();
+            int health = (int) Math.ceil(currentTarget.getHealth());
+            int maxHealth = (int) Math.ceil(currentTarget.getMaxHealth());
+            String actionBarMessage = "§eSpectating: §a" + playerName + " §c❤ " + health + "/" + maxHealth;
+            
+            // Using spigot API to send action bar
+            net.md_5.bungee.api.chat.TextComponent component = new net.md_5.bungee.api.chat.TextComponent(actionBarMessage);
+            spectator.spigot().sendMessage(net.md_5.bungee.api.ChatMessageType.ACTION_BAR, component);
         }
         
         private boolean isInTightSpace(Location loc) {
