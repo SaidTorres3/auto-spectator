@@ -1,6 +1,14 @@
 # AutoSpectator
 
-An auto-spectate Minecraft Spigot plugin for automatically spectate players in the background without using a finger.
+A Minecraft Spigot plugin that automatically spectates players and records their perspective. AutoSpectator allows you to set up automatic camera accounts that follow players during gameplay, perfect for creating cinematic recordings without manual camera control.
+
+## Features
+
+- **Automatic Spectating**: Automatically spectate players or cycle through multiple players
+- **Configurable Triggers**: Respond to in-game events like player death, damage, or hostile encounters
+- **Time-Based Spectating**: Set custom durations for spectating before switching targets
+- **Auto Mode**: Automatically cycle through online players at configurable intervals
+- **Command-Based Control**: Easily manage spectator settings with in-game commands
 
 ## Requirements
 
@@ -64,37 +72,64 @@ auto-spectator/
 ├── src/
 │   ├── main/
 │   │   ├── java/
-│   │   │   └── com/example/plugin/
-│   │   │       └── Main.java          # Main plugin class
+│   │   │   └── com/autospectator/plugin/
+│   │   │       ├── Main.java                  # Main plugin class
+│   │   │       ├── AutoSpectateCommand.java   # Command handler
+│   │   │       ├── SpectatorManager.java      # Core spectator logic
+│   │   │       ├── SpectatorListener.java     # Event listener
+│   │   │       └── SpectatorSession.java      # Session management
 │   │   └── resources/
-│   │       └── plugin.yml             # Plugin configuration
+│   │       ├── plugin.yml                     # Plugin metadata
+│   │       └── config.yml                     # Plugin configuration
 │   └── test/
 ├── pom.xml                            # Maven configuration
 ├── build.ps1                          # PowerShell build script
 └── README.md                          # This file
 ```
 
+## Usage
+
+### Basic Commands
+
+- `/autospectate` - Toggle auto-spectator mode on/off
+- `/autospectate <player>` - Spectate a specific player
+- `/autospectate time <seconds>` - Set spectate duration before switching targets
+- `/autospectate auto` - Enable auto mode to cycle through players
+
+### Permissions
+
+- `autospectator.use` - Allows players to use the autospectate command (default: op)
+
 ## Configuration
 
-Edit `src/main/resources/plugin.yml` to customize:
+Edit `config.yml` to configure triggers and settings:
 
-- Plugin name
-- Version
-- Description
-- Commands and permissions
+```yaml
+spectate-duration: 15                   # Default spectate duration in seconds
+
+triggers:
+  damage: true                          # Trigger on player damage
+  damage-threshold: 5.0                 # Minimum damage to trigger spectating
+  hostile-mob-hit: true                 # Trigger when hitting hostile mobs
+  fall-damage-prediction: true          # Trigger on predicted fall damage
+  fall-distance-threshold: 5.0          # Minimum fall distance to trigger
+```
 
 ## Development
 
 The main plugin class is located at:
 
 ```
-src/main/java/com/example/plugin/Main.java
+src/main/java/com/autospectator/plugin/Main.java
 ```
 
-This class extends `JavaPlugin` and provides:
+Key classes:
 
-- `onEnable()`: Called when the plugin is loaded
-- `onDisable()`: Called when the plugin is unloaded
+- `Main.java` - Plugin entry point and initialization
+- `AutoSpectateCommand.java` - Command handler for `/autospectate` command
+- `SpectatorManager.java` - Core logic for managing spectator sessions
+- `SpectatorListener.java` - Event listener for in-game triggers
+- `SpectatorSession.java` - Manages individual spectator sessions
 
 ## License
 

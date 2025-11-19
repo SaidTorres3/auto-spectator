@@ -1,4 +1,4 @@
-package com.example.plugin;
+package com.autospectator.plugin;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
