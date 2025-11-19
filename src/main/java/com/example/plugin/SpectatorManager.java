@@ -211,10 +211,20 @@ public class SpectatorManager {
         public void updateMovement() {
             if (currentTarget == null || !currentTarget.isOnline()) return;
 
+            Location targetLoc = currentTarget.getLocation();
+            
+            // Check if the target is in a very tight space (like a 2x1 tunnel)
+            if (isInTightSpace(targetLoc)) {
+                // Switch to first-person view by teleporting spectator to target location
+                spectator.setSpectatorTarget(currentTarget);
+                return;
+            }
+            
+            // If not in tight space, revert spectator target if it was set
+            spectator.setSpectatorTarget(null);
+
             // Cinematic movement logic with reduced rotation speed
             angle += 0.008;
-            
-            Location targetLoc = currentTarget.getLocation();
             
             // Check all angles and count blocked blocks
             int[] blockCounts = new int[8];
@@ -276,6 +286,36 @@ public class SpectatorManager {
             camLoc.setDirection(direction);
 
             spectator.teleport(camLoc);
+        }
+        
+        private boolean isInTightSpace(Location loc) {
+            // Check if the target is in a very tight space (like a 2x1 tunnel)
+            // We check a 3x3x3 area around the player for open space
+            
+            Block centerBlock = loc.getBlock();
+            
+            // Count air/transparent blocks in a 3x3x3 area around the target
+            int emptyBlocks = 0;
+            int totalBlocks = 0;
+            
+            for (int x = -1; x <= 1; x++) {
+                for (int y = 0; y <= 2; y++) {
+                    for (int z = -1; z <= 1; z++) {
+                        Block block = centerBlock.getRelative(x, y, z);
+                        totalBlocks++;
+                        
+                        // Count air/transparent/passable blocks
+                        if (!block.getType().isSolid() || block.isPassable()) {
+                            emptyBlocks++;
+                        }
+                    }
+                }
+            }
+            
+            // If less than 50% of the space is empty, it's a tight space
+            // A 2x1 tunnel would have about 2/3 empty (the player's column and above)
+            // A normal open area would have much more empty space
+            return emptyBlocks < (totalBlocks * 0.5);
         }
 
         private int countBlocksInLineOfSight(Location from, Location to) {
