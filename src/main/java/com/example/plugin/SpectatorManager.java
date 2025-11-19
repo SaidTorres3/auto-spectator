@@ -111,12 +111,24 @@ public class SpectatorManager {
         }
     }
 
+    public void handleDeath(Player deadPlayer, Location deathLocation) {
+        // If any spectator is in auto mode, force them to watch the death location
+        for (SpectatorSession session : sessions.values()) {
+            if (session.isAutoMode()) {
+                session.spectateLocation(deathLocation, deadPlayer.getName(), 15);
+            }
+        }
+    }
+
     private class SpectatorSession {
         private final Player spectator;
         private Player currentTarget;
+        private Location currentLocationTarget;
+        private String locationTargetName;
         private boolean autoMode = true;
         private int duration;
         private int timeRemaining;
+        private int locationSpectationTimeRemaining = 0;
         
         // Movement variables
         private double angle = 0;
@@ -162,6 +174,14 @@ public class SpectatorManager {
             // plugin.getLogger().info("Triggered spectate on " + target.getName() + " due to " + reason);
         }
 
+        public void spectateLocation(Location location, String playerName, int durationSeconds) {
+            // Set a location target that the spectator will watch for the specified duration
+            currentLocationTarget = location.clone();
+            locationTargetName = playerName;
+            locationSpectationTimeRemaining = durationSeconds; // Store seconds directly
+            currentTarget = null; // Clear player target
+        }
+
         private void setTarget(Player target) {
             this.currentTarget = target;
             // Reset movement parameters for a smooth transition or new angle
@@ -171,6 +191,18 @@ public class SpectatorManager {
 
         public void tick() {
             if (!autoMode) return; // In single player mode, we don't cycle
+
+            // Handle location spectation (death location watching)
+            if (locationSpectationTimeRemaining > 0) {
+                locationSpectationTimeRemaining--;
+                if (locationSpectationTimeRemaining <= 0) {
+                    // Time to stop watching the location and go back to auto mode
+                    currentLocationTarget = null;
+                    locationTargetName = null;
+                    findNextTarget();
+                }
+                return; // Don't process player target logic while watching a location
+            }
 
             if (currentTarget == null || !currentTarget.isOnline() || currentTarget.isDead()) {
                 findNextTarget();
@@ -209,6 +241,94 @@ public class SpectatorManager {
         }
 
         public void updateMovement() {
+            if (currentTarget == null && currentLocationTarget == null) return;
+
+            // Handle location spectation (stationary camera at death location)
+            if (currentLocationTarget != null && locationSpectationTimeRemaining > 0) {
+                Location targetLoc = currentLocationTarget;
+                
+                // Cinematic movement around the death location
+                angle += 0.008;
+                
+                // Check all angles and count blocked blocks
+                int[] blockCounts = new int[8];
+                boolean[] canPlaceCamera = new boolean[8];
+                int minBlocks = Integer.MAX_VALUE;
+                int bestAngleIndex = -1;
+                boolean anyAngleClear = false;
+                boolean anyValidAngle = false;
+                
+                for (int i = 0; i < 8; i++) {
+                    double testAngle = angle + (Math.PI / 4) * i;
+                    double testX = 5.0 * Math.cos(testAngle);
+                    double testZ = 5.0 * Math.sin(testAngle);
+                    double hoverHeight = 3.0 + Math.sin(testAngle * 0.3) * 0.5;
+                    
+                    Location testCamLoc = targetLoc.clone().add(testX, hoverHeight, testZ);
+                    
+                    // Check if camera position is not inside a block
+                    boolean cameraInBlock = isCameraInBlock(testCamLoc);
+                    canPlaceCamera[i] = !cameraInBlock;
+                    
+                    if (!cameraInBlock) {
+                        anyValidAngle = true;
+                        int blockCount = countBlocksInLineOfSight(testCamLoc, targetLoc);
+                        blockCounts[i] = blockCount;
+                        
+                        // Track the angle with least blocks
+                        if (blockCount < minBlocks) {
+                            minBlocks = blockCount;
+                            bestAngleIndex = i;
+                            if (blockCount == 0) {
+                                anyAngleClear = true;
+                            }
+                        }
+                    }
+                }
+                
+                Location camLoc;
+                
+                if (anyAngleClear && canPlaceCamera[bestAngleIndex]) {
+                    // Use the angle with zero blocks and valid camera position
+                    double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
+                    double bestX = 5.0 * Math.cos(bestAngle);
+                    double bestZ = 5.0 * Math.sin(bestAngle);
+                    double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
+                    camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
+                    
+                    // Make camera look at the death location
+                    Location lookAt = targetLoc.clone().add(0, 1.0, 0);
+                    Vector direction = lookAt.toVector().subtract(camLoc.toVector());
+                    camLoc.setDirection(direction);
+                    
+                    angle = bestAngle;
+                    spectator.teleport(camLoc);
+                    showDeathLocationActionBar();
+                } else if (anyValidAngle && minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
+                    // Use the best valid angle with least blocks
+                    double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
+                    double bestX = 5.0 * Math.cos(bestAngle);
+                    double bestZ = 5.0 * Math.sin(bestAngle);
+                    double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
+                    camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
+                    
+                    // Make camera look at the death location
+                    Location lookAt = targetLoc.clone().add(0, 1.0, 0);
+                    Vector direction = lookAt.toVector().subtract(camLoc.toVector());
+                    camLoc.setDirection(direction);
+                    
+                    angle = bestAngle;
+                    spectator.teleport(camLoc);
+                    showDeathLocationActionBar();
+                } else {
+                    // Stay at death location first-person view
+                    spectator.teleport(targetLoc.clone().add(0, 1.6, 0));
+                    showDeathLocationActionBar();
+                }
+                return;
+            }
+
+            // Handle player target spectation (normal mode)
             if (currentTarget == null || !currentTarget.isOnline()) return;
 
             Location targetLoc = currentTarget.getLocation();
@@ -344,6 +464,16 @@ public class SpectatorManager {
             int health = (int) Math.ceil(currentTarget.getHealth());
             int maxHealth = (int) Math.ceil(currentTarget.getMaxHealth());
             String actionBarMessage = "§eSpectating: §a" + playerName + " §c❤ " + health + "/" + maxHealth;
+            
+            // Using spigot API to send action bar
+            net.md_5.bungee.api.chat.TextComponent component = new net.md_5.bungee.api.chat.TextComponent(actionBarMessage);
+            spectator.spigot().sendMessage(net.md_5.bungee.api.ChatMessageType.ACTION_BAR, component);
+        }
+
+        @SuppressWarnings("deprecation")
+        private void showDeathLocationActionBar() {
+            // Show death location spectation info in ActionBar
+            String actionBarMessage = "§cSpectating death of §e" + locationTargetName + " §c(" + locationSpectationTimeRemaining + "s)";
             
             // Using spigot API to send action bar
             net.md_5.bungee.api.chat.TextComponent component = new net.md_5.bungee.api.chat.TextComponent(actionBarMessage);

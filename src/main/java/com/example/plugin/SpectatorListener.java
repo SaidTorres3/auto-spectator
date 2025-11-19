@@ -1,11 +1,13 @@
 package com.example.plugin;
 
+import org.bukkit.Location;
 import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 
 public class SpectatorListener implements Listener {
@@ -66,5 +68,14 @@ public class SpectatorListener implements Listener {
             // So just high fall distance is enough reason to watch.
             spectatorManager.handleTrigger(player, "Falling");
         }
+    }
+
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        Player deadPlayer = event.getEntity();
+        Location deathLocation = deadPlayer.getLocation();
+        
+        // Notify the spectator manager to spectate the death location
+        spectatorManager.handleDeath(deadPlayer, deathLocation);
     }
 }
