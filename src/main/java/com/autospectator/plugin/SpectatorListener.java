@@ -27,6 +27,15 @@ public class SpectatorListener implements Listener {
         if (!(event.getEntity() instanceof Player)) return;
         Player player = (Player) event.getEntity();
 
+        // Handle spectator void damage protection
+        if (event.getCause() == EntityDamageEvent.DamageCause.VOID) {
+            if (spectatorManager.isSpectator(player)) {
+                event.setCancelled(true);
+                spectatorManager.healSpectator(player, 10); // 10 hearts = 20 health points
+                return;
+            }
+        }
+
         if (plugin.getConfig().getBoolean("triggers.damage", true)) {
             double damage = event.getFinalDamage();
             double threshold = plugin.getConfig().getDouble("triggers.damage-threshold", 5.0);

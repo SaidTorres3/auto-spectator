@@ -123,6 +123,18 @@ public class SpectatorManager {
         }
     }
 
+    public boolean isSpectator(Player player) {
+        return sessions.containsKey(player.getUniqueId());
+    }
+
+    public void healSpectator(Player player, int hearts) {
+        if (sessions.containsKey(player.getUniqueId())) {
+            AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.MAX_HEALTH);
+            double maxHealth = maxHealthAttribute != null ? maxHealthAttribute.getValue() : 20.0;
+            player.setHealth(Math.min(maxHealth, player.getHealth() + (hearts * 2)));
+        }
+    }
+
     public void setSpectateTime(Player player, int seconds) {
         if (sessions.containsKey(player.getUniqueId())) {
             sessions.get(player.getUniqueId()).setDuration(seconds);
