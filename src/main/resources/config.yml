@@ -1,4 +1,6 @@
 spectate-duration: 15
+spectate-death-duration: 10
+non-interruption-in-death-spectation: true
 triggers:
   damage: true
   damage-threshold: 5.0

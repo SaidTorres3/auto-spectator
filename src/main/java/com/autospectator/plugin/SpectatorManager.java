@@ -129,9 +129,10 @@ public class SpectatorManager {
 
     public void handleDeath(Player deadPlayer, Location deathLocation) {
         // If any spectator is in auto mode, force them to watch the death location
+        int deathDuration = plugin.getConfig().getInt("spectate-death-duration", 10);
         for (SpectatorSession session : sessions.values()) {
             if (session.isAutoMode()) {
-                session.spectateLocation(deathLocation, deadPlayer.getName(), 15);
+                session.spectateLocation(deathLocation, deadPlayer.getName(), deathDuration);
             }
         }
     }
@@ -145,6 +146,7 @@ public class SpectatorManager {
         private int duration;
         private int timeRemaining;
         private int locationSpectationTimeRemaining = 0;
+        private boolean nonInterruptionInDeathSpectation;
         
         private PerspectiveMode perspective = PerspectiveMode.FOLLOWUP;
         private Location cinematicLocation;
@@ -157,6 +159,7 @@ public class SpectatorManager {
             this.spectator = spectator;
             this.duration = plugin.getConfig().getInt("spectate-duration", 15);
             this.timeRemaining = duration;
+            this.nonInterruptionInDeathSpectation = plugin.getConfig().getBoolean("non-interruption-in-death-spectation", true);
         }
 
         public void setDuration(int seconds) {
@@ -180,6 +183,11 @@ public class SpectatorManager {
         }
 
         public void triggerSpectate(Player target, String reason) {
+            // If non-interruption is enabled and we're watching a death, don't interrupt
+            if (nonInterruptionInDeathSpectation && locationSpectationTimeRemaining > 0) {
+                return;
+            }
+            
             // Only switch if we aren't already watching them
             if (currentTarget != null && currentTarget.equals(target)) {
                 // Reset timer to ensure we keep watching them during the event
