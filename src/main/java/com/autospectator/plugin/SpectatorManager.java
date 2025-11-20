@@ -151,6 +151,7 @@ public class SpectatorManager {
         private PerspectiveMode perspective = PerspectiveMode.FOLLOWUP;
         private Location cinematicLocation;
         private long lastCinematicSwitch;
+        private double currentLookAtY = -1;
 
         // Movement variables
         private double angle = 0;
@@ -215,6 +216,7 @@ public class SpectatorManager {
             // Reset movement parameters for a smooth transition or new angle
             angle = random.nextDouble() * Math.PI * 2;
             spectator.setSpectatorTarget(null); // Unlock camera so we can move it
+            currentLookAtY = target.getLocation().getY() + 1.6;
         }
 
         public void setPerspective(PerspectiveMode mode) {
@@ -377,6 +379,15 @@ public class SpectatorManager {
 
         private void updateCinematicMovement() {
             Location targetLoc = currentTarget.getLocation();
+            
+            // Check if the target is in a very tight space (like a 2x1 tunnel)
+            if (isInTightSpace(targetLoc)) {
+                // Switch to first-person view by teleporting spectator to target location
+                spectator.setSpectatorTarget(currentTarget);
+                showPlayerNameActionBar();
+                return;
+            }
+
             long currentTime = System.currentTimeMillis();
 
             // Check if we need to switch position (every 8 seconds or if view is blocked)
@@ -409,18 +420,36 @@ public class SpectatorManager {
                 if (!candidates.isEmpty()) {
                     cinematicLocation = candidates.get(random.nextInt(candidates.size()));
                     lastCinematicSwitch = currentTime;
-                } else if (cinematicLocation == null) {
-                    // Fallback if no good spot found: just go up
-                    cinematicLocation = targetLoc.clone().add(0, 5, 0);
+                    spectator.setSpectatorTarget(null);
+                } else {
+                    // No valid spot found, switch to first person
+                    cinematicLocation = null;
                 }
             }
 
             // Always look at the player
             if (cinematicLocation != null) {
-                Location lookAt = targetLoc.clone().add(0, 1.6, 0); // Look at eyes
+                spectator.setSpectatorTarget(null);
+                
+                // Smooth vertical aim to avoid shaking when jumping
+                double targetY = targetLoc.getY() + 1.6;
+                if (currentLookAtY == -1 || Math.abs(currentLookAtY - targetY) > 10) {
+                    currentLookAtY = targetY;
+                } else {
+                    // Smoothly interpolate Y
+                    currentLookAtY += (targetY - currentLookAtY) * 0.1;
+                }
+                
+                Location lookAt = targetLoc.clone();
+                lookAt.setY(currentLookAtY);
+                
                 Vector direction = lookAt.toVector().subtract(cinematicLocation.toVector());
                 cinematicLocation.setDirection(direction);
                 spectator.teleport(cinematicLocation);
+                showPlayerNameActionBar();
+            } else {
+                // Fallback to first person view
+                spectator.setSpectatorTarget(currentTarget);
                 showPlayerNameActionBar();
             }
         }
