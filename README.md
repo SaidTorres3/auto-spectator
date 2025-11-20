@@ -76,8 +76,7 @@ auto-spectator/
 │   │   │       ├── Main.java                  # Main plugin class
 │   │   │       ├── AutoSpectateCommand.java   # Command handler
 │   │   │       ├── SpectatorManager.java      # Core spectator logic
-│   │   │       ├── SpectatorListener.java     # Event listener
-│   │   │       └── SpectatorSession.java      # Session management
+│   │   │       └── SpectatorListener.java     # Event listener
 │   │   └── resources/
 │   │       ├── plugin.yml                     # Plugin metadata
 │   │       └── config.yml                     # Plugin configuration
@@ -95,6 +94,7 @@ auto-spectator/
 - `/autospectate <player>` - Spectate a specific player
 - `/autospectate time <seconds>` - Set spectate duration before switching targets
 - `/autospectate auto` - Enable auto mode to cycle through players
+- `/autospectate perspective <followup|cinematic>` - Set the camera perspective mode. `followup` uses an orbital follow camera; `cinematic` uses offset cinematic cameras; default is `followup`.
 
 ### Permissions
 
@@ -102,17 +102,32 @@ auto-spectator/
 
 ## Configuration
 
-Edit `config.yml` to configure triggers and settings:
+Edit `config.yml` (in `src/main/resources`) to configure triggers and camera behavior. Current default keys:
 
 ```yaml
-spectate-duration: 15                   # Default spectate duration in seconds
+# General timings
+spectate-duration: 15                     # Default spectate duration in seconds
+spectate-death-duration: 10               # Duration to spectate on player death
+non-interruption-in-death-spectation: true # If true, death spectating won't be interrupted by other triggers
+
+# Cinematic camera offsets (used for cinematic, smooth follow)
+cinematic:
+  distance-min: 6                          # Minimum distance in blocks from the player
+  distance-max: 9                          # Maximum distance in blocks from the player
+  height-min: -2                           # Minimum height offset relative to player
+  height-max: 6                            # Maximum height offset relative to player
+
+# Follow-up (orbital) camera settings
+followup:
+  distance: 5.0                            # Orbital radius around the player
+  hover-height-offset: 3.0                 # Vertical hover offset for the follow camera
 
 triggers:
-  damage: true                          # Trigger on player damage
-  damage-threshold: 5.0                 # Minimum damage to trigger spectating
-  hostile-mob-hit: true                 # Trigger when hitting hostile mobs
-  fall-damage-prediction: true          # Trigger on predicted fall damage
-  fall-distance-threshold: 5.0          # Minimum fall distance to trigger
+  damage: true                             # Trigger on player damage
+  damage-threshold: 5.0                    # Minimum damage to trigger spectating
+  hostile-mob-hit: true                    # Trigger when hitting hostile mobs
+  fall-damage-prediction: true             # Trigger on predicted fall damage
+  fall-distance-threshold: 5.0             # Minimum fall distance to trigger
 ```
 
 ## Development
@@ -129,7 +144,6 @@ Key classes:
 - `AutoSpectateCommand.java` - Command handler for `/autospectate` command
 - `SpectatorManager.java` - Core logic for managing spectator sessions
 - `SpectatorListener.java` - Event listener for in-game triggers
-- `SpectatorSession.java` - Manages individual spectator sessions
 
 ## License
 
