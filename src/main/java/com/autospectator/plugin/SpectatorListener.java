@@ -9,6 +9,8 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerGameModeChangeEvent;
 
 public class SpectatorListener implements Listener {
 
@@ -77,5 +79,15 @@ public class SpectatorListener implements Listener {
         
         // Notify the spectator manager to spectate the death location
         spectatorManager.handleDeath(deadPlayer, deathLocation);
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        spectatorManager.handleJoin(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onGameModeChange(PlayerGameModeChangeEvent event) {
+        spectatorManager.handleGameModeChange(event.getPlayer(), event.getNewGameMode());
     }
 }

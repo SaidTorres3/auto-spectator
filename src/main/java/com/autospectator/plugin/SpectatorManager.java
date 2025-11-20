@@ -65,13 +65,62 @@ public class SpectatorManager {
         player.setGameMode(GameMode.SPECTATOR);
         SpectatorSession session = new SpectatorSession(plugin, player);
         sessions.put(player.getUniqueId(), session);
+
+        // Hide this spectator from other spectators and vice versa
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (online.getUniqueId().equals(player.getUniqueId())) continue;
+
+            if (online.getGameMode() == GameMode.SPECTATOR) {
+                online.hidePlayer(plugin, player);
+                player.hidePlayer(plugin, online);
+            }
+        }
+
         session.findNextTarget();
     }
 
     public void stopSpectating(Player player) {
         sessions.remove(player.getUniqueId());
-        // Optional: Reset gamemode or leave in spectator? 
-        // User didn't specify, but usually staying in spectator is safer for a "camera account".
+        
+        // Restore visibility
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (online.getUniqueId().equals(player.getUniqueId())) continue;
+
+            online.showPlayer(plugin, player);
+            player.showPlayer(plugin, online);
+        }
+    }
+
+    public void handleJoin(Player player) {
+        if (player.getGameMode() == GameMode.SPECTATOR) {
+            for (SpectatorSession session : sessions.values()) {
+                Player spectator = session.spectator;
+                if (!spectator.equals(player)) {
+                    player.hidePlayer(plugin, spectator);
+                    spectator.hidePlayer(plugin, player);
+                }
+            }
+        }
+    }
+
+    public void handleGameModeChange(Player player, GameMode newMode) {
+        if (newMode == GameMode.SPECTATOR) {
+            for (SpectatorSession session : sessions.values()) {
+                Player spectator = session.spectator;
+                if (!spectator.equals(player)) {
+                    player.hidePlayer(plugin, spectator);
+                    spectator.hidePlayer(plugin, player);
+                }
+            }
+        } else {
+            for (SpectatorSession session : sessions.values()) {
+                Player spectator = session.spectator;
+                if (!spectator.equals(player)) {
+                    spectator.showPlayer(plugin, player);
+                    player.showPlayer(plugin, spectator);
+                }
+            }
+        }
     }
 
     public void setSpectateTime(Player player, int seconds) {
