@@ -1,9 +1,26 @@
 spectate-duration: 15
 spectate-death-duration: 10
 non-interruption-in-death-spectation: true
+
+# Spectator distance settings
+cinematic:
+  # Distance in blocks from the player (6 to 9)
+  distance-min: 6
+  distance-max: 9
+  # Height offset relative to the player (-2 to +6)
+  height-min: -2
+  height-max: 6
+
+followup:
+  # Distance in blocks (orbital radius around the player)
+  distance: 5.0
+  # Height hover offset
+  hover-height-offset: 3.0
+
 triggers:
   damage: true
   damage-threshold: 5.0
   hostile-mob-hit: true
   fall-damage-prediction: true
   fall-distance-threshold: 5.0
+

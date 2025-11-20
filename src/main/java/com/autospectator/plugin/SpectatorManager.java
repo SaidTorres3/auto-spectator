@@ -214,6 +214,14 @@ public class SpectatorManager {
         private long lastCinematicSwitch;
         private double currentLookAtY = -1;
 
+        // Configurable distances
+        private double cinematicDistanceMin;
+        private double cinematicDistanceMax;
+        private double cinematicHeightMin;
+        private double cinematicHeightMax;
+        private double followupDistance;
+        private double followupHoverHeightOffset;
+
         // Movement variables
         private double angle = 0;
 
@@ -222,6 +230,16 @@ public class SpectatorManager {
             this.duration = plugin.getConfig().getInt("spectate-duration", 15);
             this.timeRemaining = duration;
             this.nonInterruptionInDeathSpectation = plugin.getConfig().getBoolean("non-interruption-in-death-spectation", true);
+            
+            // Load cinematic settings
+            this.cinematicDistanceMin = plugin.getConfig().getDouble("cinematic.distance-min", 6);
+            this.cinematicDistanceMax = plugin.getConfig().getDouble("cinematic.distance-max", 20);
+            this.cinematicHeightMin = plugin.getConfig().getDouble("cinematic.height-min", -2);
+            this.cinematicHeightMax = plugin.getConfig().getDouble("cinematic.height-max", 6);
+            
+            // Load followup settings
+            this.followupDistance = plugin.getConfig().getDouble("followup.distance", 5.0);
+            this.followupHoverHeightOffset = plugin.getConfig().getDouble("followup.hover-height-offset", 3.0);
         }
 
         public void setDuration(int seconds) {
@@ -371,9 +389,10 @@ public class SpectatorManager {
             
             for (int i = 0; i < 8; i++) {
                 double testAngle = angle + (Math.PI / 4) * i;
-                double testX = 5.0 * Math.cos(testAngle);
-                double testZ = 5.0 * Math.sin(testAngle);
-                double hoverHeight = 3.0 + Math.sin(testAngle * 0.3) * 0.5;
+                double distance = cinematicDistanceMin + random.nextDouble() * (cinematicDistanceMax - cinematicDistanceMin);
+                double testX = distance * Math.cos(testAngle);
+                double testZ = distance * Math.sin(testAngle);
+                double hoverHeight = cinematicHeightMin + Math.sin(testAngle * 0.3) * (cinematicHeightMax - cinematicHeightMin) * 0.25;
                 
                 Location testCamLoc = targetLoc.clone().add(testX, hoverHeight, testZ);
                 
@@ -402,9 +421,10 @@ public class SpectatorManager {
             if (anyAngleClear && canPlaceCamera[bestAngleIndex]) {
                 // Use the angle with zero blocks and valid camera position
                 double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
-                double bestX = 5.0 * Math.cos(bestAngle);
-                double bestZ = 5.0 * Math.sin(bestAngle);
-                double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
+                double bestDistance = cinematicDistanceMin + random.nextDouble() * (cinematicDistanceMax - cinematicDistanceMin);
+                double bestX = bestDistance * Math.cos(bestAngle);
+                double bestZ = bestDistance * Math.sin(bestAngle);
+                double bestHoverHeight = cinematicHeightMin + Math.sin(bestAngle * 0.3) * (cinematicHeightMax - cinematicHeightMin) * 0.25;
                 camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
                 
                 // Make camera look at the death location
@@ -418,9 +438,10 @@ public class SpectatorManager {
             } else if (anyValidAngle && minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
                 // Use the best valid angle with least blocks
                 double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
-                double bestX = 5.0 * Math.cos(bestAngle);
-                double bestZ = 5.0 * Math.sin(bestAngle);
-                double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
+                double bestDistance = cinematicDistanceMin + random.nextDouble() * (cinematicDistanceMax - cinematicDistanceMin);
+                double bestX = bestDistance * Math.cos(bestAngle);
+                double bestZ = bestDistance * Math.sin(bestAngle);
+                double bestHoverHeight = cinematicHeightMin + Math.sin(bestAngle * 0.3) * (cinematicHeightMax - cinematicHeightMin) * 0.25;
                 camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
                 
                 // Make camera look at the death location
@@ -450,12 +471,13 @@ public class SpectatorManager {
             }
 
             long currentTime = System.currentTimeMillis();
+            double maxDistance = cinematicDistanceMax;
 
             // Check if we need to switch position (every 8 seconds or if view is blocked)
             boolean needsSwitch = cinematicLocation == null || 
                                   (currentTime - lastCinematicSwitch > 8000) || // Switch every 8 seconds
                                   countBlocksInLineOfSight(cinematicLocation, targetLoc.clone().add(0, 1.6, 0)) > 0 ||
-                                  cinematicLocation.distance(targetLoc) > 25; // Too far
+                                  cinematicLocation.distance(targetLoc) > maxDistance + 5; // Too far
 
             if (needsSwitch) {
                 // Find a new spot
@@ -463,8 +485,8 @@ public class SpectatorManager {
                 for (int i = 0; i < 15; i++) {
                     // Random angle and distance
                     double angle = random.nextDouble() * Math.PI * 2;
-                    double distance = 6 + random.nextDouble() * 14; // 6 to 20 blocks away
-                    double height = -2 + random.nextDouble() * 8; // -2 to +6 height relative to player
+                    double distance = cinematicDistanceMin + random.nextDouble() * (cinematicDistanceMax - cinematicDistanceMin);
+                    double height = cinematicHeightMin + random.nextDouble() * (cinematicHeightMax - cinematicHeightMin);
 
                     Location candidate = targetLoc.clone().add(
                         distance * Math.cos(angle),
@@ -529,7 +551,7 @@ public class SpectatorManager {
             // If not in tight space, revert spectator target if it was set
             spectator.setSpectatorTarget(null);
 
-            // Cinematic movement logic with reduced rotation speed
+            // Followup movement logic with orbital camera
             angle += 0.008;
             
             // Check all angles and count blocked blocks
@@ -542,9 +564,9 @@ public class SpectatorManager {
             
             for (int i = 0; i < 8; i++) {
                 double testAngle = angle + (Math.PI / 4) * i;
-                double testX = 5.0 * Math.cos(testAngle);
-                double testZ = 5.0 * Math.sin(testAngle);
-                double hoverHeight = 3.0 + Math.sin(testAngle * 0.3) * 0.5;
+                double testX = followupDistance * Math.cos(testAngle);
+                double testZ = followupDistance * Math.sin(testAngle);
+                double hoverHeight = followupHoverHeightOffset + Math.sin(testAngle * 0.3) * 0.5;
                 
                 Location testCamLoc = targetLoc.clone().add(testX, hoverHeight, testZ);
                 
@@ -573,9 +595,9 @@ public class SpectatorManager {
             if (anyAngleClear && canPlaceCamera[bestAngleIndex]) {
                 // Use the angle with zero blocks and valid camera position
                 double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
-                double bestX = 5.0 * Math.cos(bestAngle);
-                double bestZ = 5.0 * Math.sin(bestAngle);
-                double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
+                double bestX = followupDistance * Math.cos(bestAngle);
+                double bestZ = followupDistance * Math.sin(bestAngle);
+                double bestHoverHeight = followupHoverHeightOffset + Math.sin(bestAngle * 0.3) * 0.5;
                 camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
                 
                 // Make camera look at the target (specifically their eyes/head)
@@ -589,9 +611,9 @@ public class SpectatorManager {
             } else if (anyValidAngle && minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
                 // Use the best valid angle with least blocks
                 double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
-                double bestX = 5.0 * Math.cos(bestAngle);
-                double bestZ = 5.0 * Math.sin(bestAngle);
-                double bestHoverHeight = 3.0 + Math.sin(bestAngle * 0.3) * 0.5;
+                double bestX = followupDistance * Math.cos(bestAngle);
+                double bestZ = followupDistance * Math.sin(bestAngle);
+                double bestHoverHeight = followupHoverHeightOffset + Math.sin(bestAngle * 0.3) * 0.5;
                 camLoc = targetLoc.clone().add(bestX, bestHoverHeight, bestZ);
                 
                 // Make camera look at the target (specifically their eyes/head)
