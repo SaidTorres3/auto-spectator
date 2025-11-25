@@ -7,7 +7,6 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
 import java.util.*;
@@ -31,24 +30,18 @@ public class SpectatorManager {
 
     private void startTasks() {
         // Movement task - runs every tick
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                for (SpectatorSession session : sessions.values()) {
-                    session.updateMovement();
-                }
+        FoliaScheduler.runTaskTimer(plugin, () -> {
+            for (SpectatorSession session : sessions.values()) {
+                session.updateMovement();
             }
-        }.runTaskTimer(plugin, 0L, 1L);
+        }, 0L, 1L);
 
         // Logic task - runs every second to check timers/cycling
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                for (SpectatorSession session : sessions.values()) {
-                    session.tick();
-                }
+        FoliaScheduler.runTaskTimer(plugin, () -> {
+            for (SpectatorSession session : sessions.values()) {
+                session.tick();
             }
-        }.runTaskTimer(plugin, 0L, 20L);
+        }, 0L, 20L);
     }
 
     public void toggleSpectator(Player player) {
@@ -199,6 +192,7 @@ public class SpectatorManager {
     }
 
     private class SpectatorSession {
+        private final Main plugin;
         private final Player spectator;
         private Player currentTarget;
         private Location currentLocationTarget;
@@ -226,6 +220,7 @@ public class SpectatorManager {
         private double angle = 0;
 
         public SpectatorSession(Main plugin, Player spectator) {
+            this.plugin = plugin;
             this.spectator = spectator;
             this.duration = plugin.getConfig().getInt("spectate-duration", 15);
             this.timeRemaining = duration;
@@ -433,7 +428,7 @@ public class SpectatorManager {
                 camLoc.setDirection(direction);
                 
                 angle = bestAngle;
-                spectator.teleport(camLoc);
+                FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
                 showDeathLocationActionBar();
             } else if (anyValidAngle && minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
                 // Use the best valid angle with least blocks
@@ -450,11 +445,11 @@ public class SpectatorManager {
                 camLoc.setDirection(direction);
                 
                 angle = bestAngle;
-                spectator.teleport(camLoc);
+                FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
                 showDeathLocationActionBar();
             } else {
                 // Stay at death location first-person view
-                spectator.teleport(targetLoc.clone().add(0, 1.6, 0));
+                FoliaScheduler.teleportAsync(plugin, spectator, targetLoc.clone().add(0, 1.6, 0));
                 showDeathLocationActionBar();
             }
         }
@@ -528,7 +523,7 @@ public class SpectatorManager {
                 
                 Vector direction = lookAt.toVector().subtract(cinematicLocation.toVector());
                 cinematicLocation.setDirection(direction);
-                spectator.teleport(cinematicLocation);
+                FoliaScheduler.teleportAsync(plugin, spectator, cinematicLocation);
                 showPlayerNameActionBar();
             } else {
                 // Fallback to first person view
@@ -606,7 +601,7 @@ public class SpectatorManager {
                 camLoc.setDirection(direction);
                 
                 angle = bestAngle;
-                spectator.teleport(camLoc);
+                FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
                 showPlayerNameActionBar();
             } else if (anyValidAngle && minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
                 // Use the best valid angle with least blocks
@@ -622,7 +617,7 @@ public class SpectatorManager {
                 camLoc.setDirection(direction);
                 
                 angle = bestAngle;
-                spectator.teleport(camLoc);
+                FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
                 showPlayerNameActionBar();
             } else {
                 // No valid angle found at normal distance - switch to first person
