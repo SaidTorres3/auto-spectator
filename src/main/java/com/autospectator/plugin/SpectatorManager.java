@@ -354,22 +354,25 @@ public class SpectatorManager {
 
             // Handle location spectation (stationary camera at death location)
             if (currentLocationTarget != null && locationSpectationTimeRemaining > 0) {
-                updateDeathLocationSpectation();
+                Location targetLoc = currentLocationTarget;
+                FoliaScheduler.runAtLocation(plugin, targetLoc, () -> updateDeathLocationSpectation(targetLoc));
                 return;
             }
 
             // Handle player target spectation (normal mode)
             if (currentTarget == null || !currentTarget.isOnline()) return;
 
-            if (perspective == PerspectiveMode.CINEMATIC) {
-                updateCinematicMovement();
-            } else {
-                updateFollowupMovement();
-            }
+            FoliaScheduler.runEntityTask(plugin, currentTarget, () -> {
+                Location targetLoc = currentTarget.getLocation();
+                if (perspective == PerspectiveMode.CINEMATIC) {
+                    updateCinematicMovement(targetLoc);
+                } else {
+                    updateFollowupMovement(targetLoc);
+                }
+            });
         }
 
-        private void updateDeathLocationSpectation() {
-            Location targetLoc = currentLocationTarget;
+        private void updateDeathLocationSpectation(Location targetLoc) {
             
             // Cinematic movement around the death location
             angle += 0.008;
@@ -428,8 +431,11 @@ public class SpectatorManager {
                 camLoc.setDirection(direction);
                 
                 angle = bestAngle;
-                FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
-                showDeathLocationActionBar();
+                String actionBarMessage = buildDeathLocationActionBarMessage();
+                runOnSpectator(() -> {
+                    FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
+                    sendActionBar(actionBarMessage);
+                });
             } else if (anyValidAngle && minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
                 // Use the best valid angle with least blocks
                 double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
@@ -445,23 +451,31 @@ public class SpectatorManager {
                 camLoc.setDirection(direction);
                 
                 angle = bestAngle;
-                FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
-                showDeathLocationActionBar();
+                String actionBarMessage = buildDeathLocationActionBarMessage();
+                runOnSpectator(() -> {
+                    FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
+                    sendActionBar(actionBarMessage);
+                });
             } else {
                 // Stay at death location first-person view
-                FoliaScheduler.teleportAsync(plugin, spectator, targetLoc.clone().add(0, 1.6, 0));
-                showDeathLocationActionBar();
+                String actionBarMessage = buildDeathLocationActionBarMessage();
+                runOnSpectator(() -> {
+                    FoliaScheduler.teleportAsync(plugin, spectator, targetLoc.clone().add(0, 1.6, 0));
+                    sendActionBar(actionBarMessage);
+                });
             }
         }
 
-        private void updateCinematicMovement() {
-            Location targetLoc = currentTarget.getLocation();
+        private void updateCinematicMovement(Location targetLoc) {
             
             // Check if the target is in a very tight space (like a 2x1 tunnel)
             if (isInTightSpace(targetLoc)) {
                 // Switch to first-person view by teleporting spectator to target location
-                spectator.setSpectatorTarget(currentTarget);
-                showPlayerNameActionBar();
+                String actionBarMessage = buildPlayerActionBarMessage();
+                runOnSpectator(() -> {
+                    spectator.setSpectatorTarget(currentTarget);
+                    sendActionBar(actionBarMessage);
+                });
                 return;
             }
 
@@ -498,7 +512,7 @@ public class SpectatorManager {
                 if (!candidates.isEmpty()) {
                     cinematicLocation = candidates.get(random.nextInt(candidates.size()));
                     lastCinematicSwitch = currentTime;
-                    spectator.setSpectatorTarget(null);
+                    runOnSpectator(() -> spectator.setSpectatorTarget(null));
                 } else {
                     // No valid spot found, switch to first person
                     cinematicLocation = null;
@@ -507,7 +521,7 @@ public class SpectatorManager {
 
             // Always look at the player
             if (cinematicLocation != null) {
-                spectator.setSpectatorTarget(null);
+                runOnSpectator(() -> spectator.setSpectatorTarget(null));
                 
                 // Smooth vertical aim to avoid shaking when jumping
                 double targetY = targetLoc.getY() + 1.6;
@@ -523,28 +537,36 @@ public class SpectatorManager {
                 
                 Vector direction = lookAt.toVector().subtract(cinematicLocation.toVector());
                 cinematicLocation.setDirection(direction);
-                FoliaScheduler.teleportAsync(plugin, spectator, cinematicLocation);
-                showPlayerNameActionBar();
+                String actionBarMessage = buildPlayerActionBarMessage();
+                runOnSpectator(() -> {
+                    FoliaScheduler.teleportAsync(plugin, spectator, cinematicLocation);
+                    sendActionBar(actionBarMessage);
+                });
             } else {
                 // Fallback to first person view
-                spectator.setSpectatorTarget(currentTarget);
-                showPlayerNameActionBar();
+                String actionBarMessage = buildPlayerActionBarMessage();
+                runOnSpectator(() -> {
+                    spectator.setSpectatorTarget(currentTarget);
+                    sendActionBar(actionBarMessage);
+                });
             }
         }
 
-        private void updateFollowupMovement() {
-            Location targetLoc = currentTarget.getLocation();
+        private void updateFollowupMovement(Location targetLoc) {
             
             // Check if the target is in a very tight space (like a 2x1 tunnel)
             if (isInTightSpace(targetLoc)) {
                 // Switch to first-person view by teleporting spectator to target location
-                spectator.setSpectatorTarget(currentTarget);
-                showPlayerNameActionBar();
+                String actionBarMessage = buildPlayerActionBarMessage();
+                runOnSpectator(() -> {
+                    spectator.setSpectatorTarget(currentTarget);
+                    sendActionBar(actionBarMessage);
+                });
                 return;
             }
             
             // If not in tight space, revert spectator target if it was set
-            spectator.setSpectatorTarget(null);
+            runOnSpectator(() -> spectator.setSpectatorTarget(null));
 
             // Followup movement logic with orbital camera
             angle += 0.008;
@@ -601,8 +623,11 @@ public class SpectatorManager {
                 camLoc.setDirection(direction);
                 
                 angle = bestAngle;
-                FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
-                showPlayerNameActionBar();
+                String actionBarMessage = buildPlayerActionBarMessage();
+                runOnSpectator(() -> {
+                    FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
+                    sendActionBar(actionBarMessage);
+                });
             } else if (anyValidAngle && minBlocks < Integer.MAX_VALUE && minBlocks > 0) {
                 // Use the best valid angle with least blocks
                 double bestAngle = angle + (Math.PI / 4) * bestAngleIndex;
@@ -617,12 +642,18 @@ public class SpectatorManager {
                 camLoc.setDirection(direction);
                 
                 angle = bestAngle;
-                FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
-                showPlayerNameActionBar();
+                String actionBarMessage = buildPlayerActionBarMessage();
+                runOnSpectator(() -> {
+                    FoliaScheduler.teleportAsync(plugin, spectator, camLoc);
+                    sendActionBar(actionBarMessage);
+                });
             } else {
                 // No valid angle found at normal distance - switch to first person
-                spectator.setSpectatorTarget(currentTarget);
-                showPlayerNameActionBar();
+                String actionBarMessage = buildPlayerActionBarMessage();
+                runOnSpectator(() -> {
+                    spectator.setSpectatorTarget(currentTarget);
+                    sendActionBar(actionBarMessage);
+                });
             }
         }
         
@@ -659,25 +690,25 @@ public class SpectatorManager {
             return block.getType().isSolid() && !block.isPassable();
         }
         
-        private void showPlayerNameActionBar() {
-            // Show player name in ActionBar (subtitle bar)
+        private void runOnSpectator(Runnable task) {
+            FoliaScheduler.runEntityTask(plugin, spectator, task);
+        }
+
+        private String buildPlayerActionBarMessage() {
+            if (currentTarget == null) return "§eSpectating";
             String playerName = currentTarget.getName();
             int health = (int) Math.ceil(currentTarget.getHealth());
             AttributeInstance maxHealthAttribute = currentTarget.getAttribute(Attribute.MAX_HEALTH);
             double maxHealthValue = maxHealthAttribute != null ? maxHealthAttribute.getValue() : currentTarget.getHealth();
             int maxHealth = (int) Math.ceil(maxHealthValue);
-            String actionBarMessage = "§eSpectating: §a" + playerName + " §c❤ " + health + "/" + maxHealth;
-            
-            // Using spigot API to send action bar
-            net.md_5.bungee.api.chat.TextComponent component = new net.md_5.bungee.api.chat.TextComponent(actionBarMessage);
-            spectator.spigot().sendMessage(net.md_5.bungee.api.ChatMessageType.ACTION_BAR, component);
+            return "§eSpectating: §a" + playerName + " §c❤ " + health + "/" + maxHealth;
         }
 
-        private void showDeathLocationActionBar() {
-            // Show death location spectation info in ActionBar
-            String actionBarMessage = "§cSpectating death of §e" + locationTargetName + " §c(" + locationSpectationTimeRemaining + "s)";
-            
-            // Using spigot API to send action bar
+        private String buildDeathLocationActionBarMessage() {
+            return "§cSpectating death of §e" + locationTargetName + " §c(" + locationSpectationTimeRemaining + "s)";
+        }
+
+        private void sendActionBar(String actionBarMessage) {
             net.md_5.bungee.api.chat.TextComponent component = new net.md_5.bungee.api.chat.TextComponent(actionBarMessage);
             spectator.spigot().sendMessage(net.md_5.bungee.api.ChatMessageType.ACTION_BAR, component);
         }
